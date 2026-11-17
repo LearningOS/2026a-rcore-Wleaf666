@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "courseId": 2073,
+  "repository": "LearningOS/2026a-rcore-Wleaf666",
+  "user": "Wleaf666",
+  "totalScore": 500,
+  "chapters": {
+    "ch3": {
+      "points": "7/7",
+      "score": 100,
+      "commit": "1c73da1d5b1d080adf80b012d613a98f3237f1fc"
+    }
+  },
+  "score": 100,
+  "upload": {
+    "status": "pending",
+    "runId": "44089272265",
+    "runAttempt": "1"
+  }
+}
