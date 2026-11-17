@@ -14,6 +14,8 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use core::panic;
+
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
@@ -54,6 +56,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_counts:[0;411],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +138,36 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn record_syscall(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        let task = &mut inner.tasks[current];
+
+        if let Some(count) = task.syscall_counts.get_mut(syscall_id) {
+            *count += 1;
+        } else {
+            panic!("record_syscall error");
+        }
+    }
+
+    fn get_syscall_count(&self,syscall_id: usize) ->usize{
+        let  inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        let task = & inner.tasks[current];
+        task.syscall_counts.get(syscall_id).copied().unwrap_or(0)
+    }
+}
+
+///记录进行系统级调用的次数
+pub fn record_syscall(syscall_id: usize) {
+    TASK_MANAGER.record_syscall(syscall_id);
+}
+///获取指定id的系统及调用的次数
+pub fn get_syscall_count(syscall_id: usize)->usize{
+    TASK_MANAGER.get_syscall_count(syscall_id)
 }
 
 /// Run the first task in task list.
