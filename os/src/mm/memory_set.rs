@@ -12,6 +12,7 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
+
 use lazy_static::*;
 use riscv::register::satp;
 
@@ -261,6 +262,48 @@ impl MemorySet {
         } else {
             false
         }
+    }
+
+    ///helper
+    pub fn unmap_range(&mut self, start: VirtPageNum, end: VirtPageNum) -> isize {
+        for vpn in VPNRange::new(start, end) {
+            let Some(pte) = self.translate(vpn) else {
+                return -1;
+            };
+            if !pte.is_valid() || (pte.flags() & PTEFlags::U != PTEFlags::U) {
+                return -1;
+            }
+        }
+        for area in &mut self.areas{
+            let area_satrt = area.vpn_range.get_start();
+            let area_end = area.vpn_range.get_end();
+
+            let cut_start =start.max(area_satrt);
+            let cut_end = end.min(area_end);
+
+            if cut_start>=cut_end{
+                continue;
+            } 
+            for vpn in VPNRange::new(cut_start, cut_end){
+                area.unmap_one(&mut self.page_table, vpn);
+            }
+        }
+
+
+        0
+    }
+    ///helper
+    pub fn map_range(&mut self,start:VirtAddr,end:VirtAddr,permission: MapPermission)->isize{
+        for vpn in VPNRange::new(start.floor() ,end.ceil()) {
+            if let Some(pte) = self.translate(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
+        self.insert_framed_area(start, end, permission);
+        1
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory

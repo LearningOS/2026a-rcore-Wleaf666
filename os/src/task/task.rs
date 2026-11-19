@@ -1,4 +1,5 @@
 //! Types related to task management
+
 use super::TaskContext;
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{
@@ -28,6 +29,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// 系统调用计数
+    pub syscall_counts: [usize; 411],
 }
 
 impl TaskControlBlock {
@@ -63,6 +67,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            syscall_counts: [0; 411],
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -95,6 +100,16 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+    ///helper
+    pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, permission: MapPermission) -> isize {
+        
+        self.memory_set.map_range(start, end,permission);
+        0
+    }
+    ///helper
+    pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
+        self.memory_set.unmap_range(start.floor(), end.ceil())
     }
 }
 

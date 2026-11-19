@@ -15,10 +15,12 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
+use crate::mm::VirtAddr;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -153,6 +155,50 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn record_syscall(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        let task = &mut inner.tasks[current];
+
+        if let Some(count) = task.syscall_counts.get_mut(syscall_id) {
+            *count += 1;
+        } else {
+            panic!("record_syscall error");
+        }
+    }
+
+    fn get_syscall_count(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        let task = &inner.tasks[current];
+        task.syscall_counts.get(syscall_id).copied().unwrap_or(0)
+    }
+
+    fn mmap(&self,start:VirtAddr,end:VirtAddr,permission:MapPermission)->isize  {
+        let mut inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        inner.tasks[current].mmap(start, end, permission)  
+    }
+
+    fn munmap(&self,start:VirtAddr,end:VirtAddr)->isize  {
+        let mut inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        inner.tasks[current].munmap(start, end)  
+    }
+}
+
+///记录进行系统级调用的次数
+pub fn record_syscall(syscall_id: usize) {
+    TASK_MANAGER.record_syscall(syscall_id);
+}
+///获取指定id的系统及调用的次数
+pub fn get_syscall_count(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_syscall_count(syscall_id)
 }
 
 /// Run the first task in task list.
@@ -201,4 +247,14 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+///helper
+pub fn mmap(start:VirtAddr,end:VirtAddr,permission:MapPermission)->isize{
+    TASK_MANAGER.mmap(start, end, permission)
+}
+
+///helper
+pub fn munmap(start:VirtAddr,end:VirtAddr)->isize{
+    TASK_MANAGER.munmap(start, end)
 }
