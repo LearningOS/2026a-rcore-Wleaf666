@@ -104,8 +104,7 @@ impl TaskControlBlock {
     ///helper
     pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, permission: MapPermission) -> isize {
         
-        self.memory_set.map_range(start, end,permission);
-        0
+        self.memory_set.map_range(start, end,permission)
     }
     ///helper
     pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
