@@ -335,7 +335,7 @@ impl MemorySet {
         }
 
         self.insert_framed_area(start, end, permission);
-        1
+        0
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
