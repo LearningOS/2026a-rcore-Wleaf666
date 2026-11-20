@@ -99,12 +99,16 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 
 ///helper
 pub fn mmap(start:VirtAddr,end:VirtAddr,permission:MapPermission)->isize{
-    PROCESSOR.exclusive_access().mmap(start, end, permission)
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.map_range(start, end, permission)
 }
 
 ///helper
 pub fn munmap(start:VirtAddr,end:VirtAddr)->isize{
-    PROCESSOR.exclusive_access().munmap(start, end)
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.unmap_range(start.floor(), end.ceil())
 }
 
 /// Get the current user token(addr of page table)

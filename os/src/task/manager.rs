@@ -25,10 +25,10 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        let (index,_) = self.ready_queue.iter().enumerate().min_by_key(|(_,task)|task.inner_exclusive_access().stride).unwrap();
+        let (index,_) = self.ready_queue.iter().enumerate().min_by_key(|(_,task)|task.inner_exclusive_access().stride)?;
         let task = self.ready_queue.remove(index).unwrap();
         let mut inner = task.inner_exclusive_access();
-        let priority = inner.priotity;
+        let priority = inner.priority;
         inner.stride+=BIG_STRIDE/priority;
 
         drop(inner);

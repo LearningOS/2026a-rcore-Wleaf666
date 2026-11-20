@@ -191,8 +191,6 @@ pub fn sys_spawn(_path: *const u8) -> isize {
             .children
             .push(new_task.clone());
         new_task.inner_exclusive_access().parent = Some(Arc::downgrade(&parent));
-        let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
-        trap_cx.x[10] = 0;
         let pid = new_task.getpid();
 
         add_task(new_task);
@@ -208,10 +206,10 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    if _prio <2 {
+    if _prio < 2 {
         return -1;
     }
 
-    current_task().unwrap().inner_exclusive_access().priotity = _prio as usize;
+    current_task().unwrap().inner_exclusive_access().priority = _prio as usize;
     _prio
 }
