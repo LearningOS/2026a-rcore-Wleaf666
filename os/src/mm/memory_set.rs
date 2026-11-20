@@ -318,6 +318,80 @@ impl MemorySet {
             false
         }
     }
+
+    ///helper
+    pub fn unmap_range(&mut self, start: VirtPageNum, end: VirtPageNum) -> isize {
+        for vpn in VPNRange::new(start, end) {
+            let Some(pte) = self.translate(vpn) else {
+                return -1;
+            };
+            if !pte.is_valid() || (pte.flags() & PTEFlags::U != PTEFlags::U) {
+                return -1;
+            }
+        }
+        let page_table = &mut self.page_table;
+        let mut right_half = None;
+
+        self.areas.retain_mut(|area| {
+            let a = area.vpn_range.get_start();
+            let b = area.vpn_range.get_end();
+            let cut_start = a.max(start);
+            let cut_end = b.min(end);
+
+            if cut_start >= cut_end {
+                return true;
+            }
+
+            for vpn in VPNRange::new(cut_start, cut_end) {
+                page_table.unmap(vpn);
+                area.data_frames.remove(&vpn);
+            }
+
+            if cut_start == a && cut_end == b {
+                return false;
+            }
+
+            if cut_start == a {
+                area.vpn_range = VPNRange::new(cut_end, b);
+            } else {
+                if cut_end < b {
+                    right_half = Some(MapArea {
+                        vpn_range: VPNRange::new(cut_end, b),
+                        data_frames: area.data_frames.split_off(&cut_end),
+                        map_type: area.map_type,
+                        map_perm: area.map_perm,
+                    });
+                }
+                area.vpn_range = VPNRange::new(a, cut_start);
+            }
+
+            true
+        });
+
+        if let Some(area) = right_half {
+            self.areas.push(area);
+        }
+
+        0
+    }
+    ///helper
+    pub fn map_range(
+        &mut self,
+        start: VirtAddr,
+        end: VirtAddr,
+        permission: MapPermission,
+    ) -> isize {
+        for vpn in VPNRange::new(start.floor(), end.ceil()) {
+            if let Some(pte) = self.translate(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
+        self.insert_framed_area(start, end, permission);
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

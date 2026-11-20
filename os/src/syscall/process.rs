@@ -1,14 +1,18 @@
 //! Process management syscalls
-//!
-use alloc::sync::Arc;
-use crate::timer::get_time_us;
+use core::panic;
+
 use crate::mm::translated_byte_buffer;
+use crate::mm::MapPermission;
+use crate::mm::VirtAddr;
+use crate::task::TaskControlBlock;
+use crate::timer::get_time_us;
+use alloc::sync::Arc;
 
 use crate::{
     fs::{open_file, OpenFlags},
     mm::{translated_refmut, translated_str},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
+        add_task, current_task, current_user_token, exit_current_and_run_next, mmap, munmap,
         suspend_current_and_run_next,
     },
 };
@@ -128,23 +132,30 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    if _port & !0x7 != 0 || _port & 0x7 == 0 {
+        return -1;
+    }
+    let permission = MapPermission::from_bits_truncate(((_port as u8) << 1) | (1 << 4));
+    let _end = VirtAddr::from(_start + _len);
+    let _start = VirtAddr::from(_start);
+    if !_start.aligned() {
+        return -1;
+    }
+    mmap(_start, _end, permission)
 }
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    let _end = VirtAddr::from(_start + _len);
+    let _start = VirtAddr::from(_start);
+    if !_start.aligned() {
+        return -1;
+    }
+    munmap(_start, _end)
 }
 
 /// change data segment size
@@ -157,6 +168,20 @@ pub fn sys_sbrk(size: i32) -> isize {
     }
 }
 
+
+// pub fn sys_exec(path: *const u8) -> isize {
+//     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
+//     let token = current_user_token();
+//     let path = translated_str(token, path);
+//     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+//         let all_data = app_inode.read_all();
+//         let task = current_task().unwrap();
+//         task.exec(all_data.as_slice());
+//         0
+//     } else {
+//         -1
+//     }
+// }
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
@@ -164,7 +189,27 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let data = app_inode.read_all();
+        let new_task = Arc::new(TaskControlBlock::new(data.as_slice()));
+        let parent = current_task().unwrap();
+        parent
+            .inner_exclusive_access()
+            .children
+            .push(new_task.clone());
+        new_task.inner_exclusive_access().parent = Some(Arc::downgrade(&parent));
+        let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+        trap_cx.x[10] = 0;
+        let pid = new_task.getpid();
+
+        add_task(new_task);
+        pid as isize
+    } else {
+        return -1;
+    }
 }
 
 // YOUR JOB: Set task priority.
@@ -173,5 +218,10 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio < 2 {
+        return -1;
+    }
+
+    current_task().unwrap().inner_exclusive_access().priotity = _prio as usize;
+    _prio
 }
