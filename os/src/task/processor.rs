@@ -8,6 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
+use crate::mm::{VirtAddr,MapPermission};
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -43,6 +44,16 @@ impl Processor {
     ///Get current task in cloning semanteme
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
+    }
+
+    ///helper
+    pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, permission: MapPermission) -> isize {
+        
+        self.current().unwrap().inner_exclusive_access().memory_set.map_range(start, end,permission)
+    }
+    ///helper
+    pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
+        self.current().unwrap().inner_exclusive_access().memory_set.unmap_range(start.floor(), end.ceil())
     }
 }
 
@@ -84,6 +95,16 @@ pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
 /// Get a copy of the current task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().current()
+}
+
+///helper
+pub fn mmap(start:VirtAddr,end:VirtAddr,permission:MapPermission)->isize{
+    PROCESSOR.exclusive_access().mmap(start, end, permission)
+}
+
+///helper
+pub fn munmap(start:VirtAddr,end:VirtAddr)->isize{
+    PROCESSOR.exclusive_access().munmap(start, end)
 }
 
 /// Get the current user token(addr of page table)

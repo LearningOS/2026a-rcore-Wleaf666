@@ -68,6 +68,13 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    pub priotity: usize,
+
+    pub stride: usize,
+
+
+    
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +125,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priotity:16,
+                    stride:0,
                 })
             },
         };
@@ -191,6 +200,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride:parent_inner.stride,
+                    priotity:parent_inner.priotity,
                 })
             },
         });
@@ -236,6 +247,9 @@ impl TaskControlBlock {
             None
         }
     }
+
+    
+    
 }
 
 #[derive(Copy, Clone, PartialEq)]
