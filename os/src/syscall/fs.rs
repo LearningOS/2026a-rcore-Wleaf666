@@ -3,6 +3,7 @@ use crate::fs::{link_file, unlinkat};
 use crate::fs::{open_file, OpenFlags, Stat};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
+use core::mem::size_of;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     trace!("kernel:pid[{}] sys_write", current_task().unwrap().pid.0);
@@ -87,10 +88,27 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     let inner = task.inner_exclusive_access();
 
     let Some(Some(file)) = inner.fd_table.get(_fd) else {
-        return -1; 
+        return -1;
     };
-    unsafe {
-        *_st = file.fstat().unwrap();
+
+    
+    let stat = file.fstat().unwrap();
+    
+    drop(inner);
+    let stat_bytes: &[u8] = unsafe {
+        core::slice::from_raw_parts(
+            (&stat as *const Stat).cast::<u8>(),
+            core::mem::size_of::<Stat>(),
+        )
+    };
+    let buffers = translated_byte_buffer(current_user_token(), _st as *const u8, size_of::<Stat>());
+
+    let mut copied = 0;
+
+    for bytes in buffers {
+        let len =bytes.len();
+        bytes.copy_from_slice(&stat_bytes[copied..len+copied]);
+        copied+=len;
     }
     0
 }
