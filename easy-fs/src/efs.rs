@@ -148,4 +148,13 @@ impl EasyFileSystem {
             (block_id - self.data_area_start_block) as usize,
         )
     }
+
+    /// 将有效的磁盘 inode 位置转换回 inode 编号。
+    pub fn inode_id_at(&self, block_id: usize, block_offset: usize) -> u32 {
+        let inode_size = core::mem::size_of::<DiskInode>();
+        let inodes_per_block = BLOCK_SZ / inode_size;
+        let block_index = block_id - self.inode_area_start_block as usize;
+
+        (block_index * inodes_per_block + block_offset / inode_size) as u32
+    }
 }

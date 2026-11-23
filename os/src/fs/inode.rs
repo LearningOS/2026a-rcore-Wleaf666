@@ -5,14 +5,16 @@
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
 use super::File;
-use crate::drivers::BLOCK_DEVICE;
+use crate::fs::Stat;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
+use crate::{drivers::BLOCK_DEVICE, fs::StatMode};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
+
 
 /// inode in memory
 /// A wrapper around a filesystem inode
@@ -61,6 +63,16 @@ lazy_static! {
         Arc::new(EasyFileSystem::root_inode(&efs))
     };
 }
+///helper
+pub fn link_file(old_name: &str, new_name: &str) -> bool {
+    ROOT_INODE.link_file(old_name, new_name)
+}
+
+///helper
+pub fn unlinkat(name: &str) -> bool {
+    ROOT_INODE.unlinkat(name)
+}
+
 
 /// List all apps in the root directory
 pub fn list_apps() {
@@ -156,4 +168,26 @@ impl File for OSInode {
         }
         total_write_size
     }
+
+    fn fstat(&self) -> Option<Stat> {
+        let inner = self.inner.exclusive_access();
+        let inode = Arc::clone(&inner.inode);
+
+        let statmode = if inode.is_dir() {
+            StatMode::DIR
+        } else {
+            StatMode::FILE
+        };
+
+        let inode_id = inode.get_inode_id();
+
+        Some(Stat {
+            dev: 0,
+            ino: inode_id as u64,
+            mode: statmode,
+            nlink: ROOT_INODE.count_links(inode_id),
+            pad: [0; 7],
+        })
+    }
+
 }
