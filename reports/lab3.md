@@ -1,6 +1,6 @@
 # 实现功能
 
-这里补充
+实现了 `spawn`，从目标 ELF 直接创建子进程、建立父子关系并加入就绪队列，无需复制父进程的地址空间。实现了优先级设置和 Stride 调度：每次选取累计值最小的就绪任务，按其优先级计算步长并更新累计值。同时迁移了 `get_time`、`mmap` 和 `munmap`，使其适配第五章的进程结构。
 
 # 问答
 
@@ -15,8 +15,8 @@
    
    impl PartialOrd for Stride {
        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-           if self-other >BigStride/priority{
-               let diff = self.0.wrapping_sub(other.0);
+           
+           let diff = self.0.wrapping_sub(other.0);
    
            if diff == (1u64 << 63) {
                return None; 
