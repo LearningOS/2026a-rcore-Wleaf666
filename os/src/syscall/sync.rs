@@ -1,3 +1,4 @@
+use crate::sync::DeadlockState;
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
@@ -49,10 +50,18 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.mutex_list[id] = mutex;
+        process_inner
+            .deadlock_state
+            .reigster_resources(DeadlockState::raw_id2resouce_id(id), 1);
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
-        process_inner.mutex_list.len() as isize - 1
+        let id = process_inner.mutex_list.len() - 1;
+
+        process_inner
+            .deadlock_state
+            .reigster_resources(DeadlockState::raw_id2resouce_id(id), 1);
+        id as isize
     }
 }
 /// mutex lock syscall
@@ -69,11 +78,28 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
+
+    let resouce_id = DeadlockState::raw_id2resouce_id(mutex_id);
+    if !process_inner.deadlock_state.try_lock(tid, resouce_id) {
+        return -0xdead;
+    }
     drop(process_inner);
     drop(process);
     mutex.lock();
+
+    current_process()
+        .inner_exclusive_access()
+        .deadlock_state
+        .locked(tid, resouce_id);
     0
 }
 /// mutex unlock syscall
@@ -95,6 +121,18 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     drop(process_inner);
     drop(process);
     mutex.unlock();
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
+    let resource_id = DeadlockState::raw_id2resouce_id(mutex_id);
+    current_process()
+        .inner_exclusive_access()
+        .deadlock_state
+        .unlocked(tid, resource_id);
     0
 }
 /// semaphore create syscall
@@ -247,5 +285,19 @@ pub fn sys_condvar_wait(condvar_id: usize, mutex_id: usize) -> isize {
 /// YOUR JOB: Implement deadlock detection, but might not all in this syscall
 pub fn sys_enable_deadlock_detect(_enabled: usize) -> isize {
     trace!("kernel: sys_enable_deadlock_detect NOT IMPLEMENTED");
-    -1
+    if _enabled == 1 {
+        current_process()
+            .inner_exclusive_access()
+            .deadlock_state
+            .is_enabled = true;
+        0
+    } else if _enabled == 0 {
+        current_process()
+            .inner_exclusive_access()
+            .deadlock_state
+            .is_enabled = false;
+        0
+    } else {
+        -1
+    }
 }
