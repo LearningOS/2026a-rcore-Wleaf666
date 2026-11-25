@@ -52,7 +52,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         process_inner.mutex_list[id] = mutex;
         process_inner
             .deadlock_state
-            .reigster_resources(DeadlockState::raw_id2resouce_id(id), 1);
+            .reigster_resources(DeadlockState::mutex_id2resouce_id(id), 1);
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
@@ -60,7 +60,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
 
         process_inner
             .deadlock_state
-            .reigster_resources(DeadlockState::raw_id2resouce_id(id), 1);
+            .reigster_resources(DeadlockState::mutex_id2resouce_id(id), 1);
         id as isize
     }
 }
@@ -88,7 +88,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         .tid;
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
 
-    let resouce_id = DeadlockState::raw_id2resouce_id(mutex_id);
+    let resouce_id = DeadlockState::mutex_id2resouce_id(mutex_id);
     if !process_inner.deadlock_state.try_lock(tid, resouce_id) {
         return -0xdead;
     }
@@ -128,7 +128,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
         .as_ref()
         .unwrap()
         .tid;
-    let resource_id = DeadlockState::raw_id2resouce_id(mutex_id);
+    let resource_id = DeadlockState::mutex_id2resouce_id(mutex_id);
     current_process()
         .inner_exclusive_access()
         .deadlock_state
@@ -158,12 +158,21 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
+        process_inner.deadlock_state.reigster_resources(
+            DeadlockState::semaphore_id2resource_id(id),
+            res_count as u32,
+        );
         id
     } else {
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
-        process_inner.semaphore_list.len() - 1
+        let id = process_inner.semaphore_list.len() - 1;
+        process_inner.deadlock_state.reigster_resources(
+            DeadlockState::semaphore_id2resource_id(id),
+            res_count as u32,
+        );
+        id
     };
     id as isize
 }
@@ -180,14 +189,27 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
             .unwrap()
             .tid
     );
+    let resource_id = DeadlockState::semaphore_id2resource_id(sem_id);
     let process = current_process();
     let process_inner = process.inner_exclusive_access();
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
+    
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.up();
+    current_process()
+        .inner_exclusive_access()
+        .deadlock_state
+        .unlocked(tid, resource_id);
     0
 }
-/// semaphore down syscall
+
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
     trace!(
         "kernel:pid[{}] tid[{}] sys_semaphore_down",
@@ -200,11 +222,27 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             .unwrap()
             .tid
     );
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
+    let resource_id = DeadlockState::semaphore_id2resource_id(sem_id);
+    
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    if !process_inner.deadlock_state.try_lock(tid, resource_id) {
+        return -0xdead;
+    }
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();
+    current_process()
+        .inner_exclusive_access()
+        .deadlock_state
+        .locked(tid, resource_id);
     0
 }
 /// condvar create syscall

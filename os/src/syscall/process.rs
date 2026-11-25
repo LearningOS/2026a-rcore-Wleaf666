@@ -7,6 +7,8 @@ use crate::{
     },
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
+use crate::timer::get_time_us;
+use crate::mm::translated_byte_buffer;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -156,7 +158,24 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let us = get_time_us();
+    let time_sec = us / 1_000_000;
+    let time_usec = us % 1_000_000;
+
+    let mut src = [0u8; 16];
+    src[..8].copy_from_slice(&time_sec.to_ne_bytes());
+    src[8..].copy_from_slice(&time_usec.to_ne_bytes());
+
+    let buffers = translated_byte_buffer(current_user_token(), _ts as *const u8, src.len());
+
+    let mut copied = 0;
+
+    for bytes in buffers {
+        let end = copied + bytes.len();
+        bytes.copy_from_slice(&src[copied..end]);
+        copied = end;
+    }
+    0
 }
 
 /// mmap syscall

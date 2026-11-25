@@ -43,8 +43,14 @@ impl DeadlockState {
                 .resize(need_len, vec![0; self.available.len()]);
         }
     }
-    ///id转化呢
-    pub fn raw_id2resouce_id(mutexid: usize) -> usize {
+
+    ///semaphore_id转化
+    pub fn semaphore_id2resource_id(semaphore_id:usize)->usize{
+        semaphore_id*2+1
+    }
+    
+    ///mutex_id转化
+    pub fn mutex_id2resouce_id(mutexid: usize) -> usize {
         mutexid * 2
     }
     ///检测是否死锁了
@@ -91,14 +97,14 @@ impl DeadlockState {
         }
     }
     ///锁后的一些操作
-    pub fn locked(&mut self, tid: usize, resouce_id: usize) {
-        self.need[tid][resouce_id] -= 1;
-        self.available[resouce_id] -= 1;
-        self.allocation[tid][resouce_id] += 1;
+    pub fn locked(&mut self, tid: usize, resource_id: usize) {
+        self.need[tid][resource_id] -= 1;
+        self.available[resource_id] -= 1;
+        self.allocation[tid][resource_id] += 1;
     }
     ///解锁后的一些操作
-    pub fn unlocked(&mut self, tid: usize, resouce_id: usize) {
-        self.available[resouce_id] += 1;
-        self.allocation[tid][resouce_id] -= 1
+    pub fn unlocked(&mut self, tid: usize, resource_id: usize) {
+        self.available[resource_id] += 1;
+        self.allocation[tid][resource_id] -= 1
     }
 }
